@@ -1,67 +1,68 @@
 import json
 import pandas as pd
+import logging
 from src.ingest import load_csv, load_json_as_dataframe
 from src.clean import clean_data
 from src.transform import find_mentions, build_drug_mentions, build_journal_mentions
 from src.analysis import journal_with_most_unique_drugs, related_drugs_via_pubmed
 from src.output import save_to_json
+from config import DRUGS_PATH, CLINICAL_TRIALS_PATH, PUBMED_CSV_PATH, PUBMED_JSON_PATH, OUTPUT_PATH, TARGET_DRUG
+
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+LOGGER = logging.getLogger(__name__)
 
 def run_pipeline():
+    LOGGER.info("Pipeline execution started.")
 
-    # Load  configuration file
-    with open("config.json", "r") as config_file:
-        config = json.load(config_file)
+    try:
+        # Load data
+        LOGGER.info("Loading input data...")
+        drugs_df = load_csv(DRUGS_PATH)
+        clinical_trials_df = load_csv(CLINICAL_TRIALS_PATH)
+        pubmed_csv_df = load_csv(PUBMED_CSV_PATH)
+        pubmed_json_df = load_json_as_dataframe(PUBMED_JSON_PATH)
+        pubmed_combined_df = pd.concat([pubmed_csv_df, pubmed_json_df], ignore_index=True)
 
-    # Paths to input data
-    drugs_path = "data/drugs.csv"
-    clinical_trials_path = "data/clinical_trials.csv"
-    pubmed_csv_path = "data/pubmed.csv"
-    pubmed_json_path = "data/pubmed.json"
-    output_path = "output/drugs_mentions.json"
+        # Clean data
+        LOGGER.info("Cleaning data...")
+        pubmed_combined_df = pubmed_combined_df.drop_duplicates()
+        clinical_trials_df = clean_data(clinical_trials_df)
+        pubmed_combined_df = clean_data(pubmed_combined_df)
 
-    # Load data
-    drugs_df = load_csv(drugs_path)
-    clinical_trials_df = load_csv(clinical_trials_path)
-    pubmed_csv_df = load_csv(pubmed_csv_path)
-    pubmed_json_df = load_json_as_dataframe(pubmed_json_path)
-    pubmed_combined_df = pd.concat([pubmed_csv_df, pubmed_json_df], ignore_index=True)
+        # Transform data
+        LOGGER.info("Transforming data...")
+        clinical_mentions = find_mentions(drugs_df, clinical_trials_df, "scientific_title", "clinical_trial")
+        pubmed_mentions = find_mentions(drugs_df, pubmed_combined_df, "title", "pubmed")
+        all_mentions = clinical_mentions + pubmed_mentions
 
-    # Clean data
-    pubmed_combined_df = pubmed_combined_df.drop_duplicates()
-    clinical_trials_df = clean_data(clinical_trials_df)
-    pubmed_combined_df = clean_data(pubmed_combined_df)
+        # Build the output JSON structure
+        LOGGER.info("Building output JSON...")
+        drugs_section = build_drug_mentions(drugs_df, all_mentions)
+        journals_section = build_journal_mentions(all_mentions)
+        final_structure = {
+            "drugs": drugs_section,
+            "journals": journals_section
+        }
 
+        # Save output
+        save_to_json(final_structure, OUTPUT_PATH)
+        LOGGER.info(f"Output successfully saved to {OUTPUT_PATH}.")
 
-    # Transform data
-    clinical_mentions = find_mentions(drugs_df, clinical_trials_df, "scientific_title", "clinical_trial")
-    pubmed_mentions = find_mentions(drugs_df, pubmed_combined_df, "title", "pubmed")
-    all_mentions = clinical_mentions + pubmed_mentions 
+        # Ad-hoc Processing
+                # Ad-hoc Processing
+        LOGGER.info("=" * 50)
+        LOGGER.info("Performing ad-hoc analyses.")
+        LOGGER.info("=" * 50)
+        top_journal = journal_with_most_unique_drugs(final_structure)
+        LOGGER.info(f"Journal with most unique drugs: {top_journal}")
 
-    # Build the output JSON structure
-    drugs_section = build_drug_mentions(drugs_df, all_mentions)
-    journals_section = build_journal_mentions(all_mentions)
+        related_drugs = related_drugs_via_pubmed(final_structure, TARGET_DRUG)
+        LOGGER.info(f"Drugs related to {TARGET_DRUG} via PubMed: {related_drugs}")
 
-    final_structure = {
-        "drugs": drugs_section,
-        "journals": journals_section
-    }
-
-    # Save output
-    save_to_json(final_structure, output_path)
-
-    # Load the generated JSON output
-    with open(output_path, "r") as file:
-        pipeline_output = json.load(file)
-
-    # Ad-hoc Processing (Bonus) 1 : Identify the journal that mentions the most unique drugs
-    top_journal = journal_with_most_unique_drugs(pipeline_output)
-    print(f"The journal that mentions the most unique drugs: {top_journal}")
-
-    # Ad-hoc Processing (Bonus) 2 : Find drugs related via PubMed for a specific drug
-    target_drug = config.get("target_drug")
-    related_drugs = related_drugs_via_pubmed(pipeline_output, target_drug)
-    print(f"Drugs related to {target_drug} via PubMed: {related_drugs}")
+    except Exception as e:
+        LOGGER.error(f"Pipeline failed with error: {e}")
+        raise
 
 if __name__ == "__main__":
-
     run_pipeline()

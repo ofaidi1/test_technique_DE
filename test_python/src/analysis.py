@@ -1,3 +1,4 @@
+
 def journal_with_most_unique_drugs(pipeline_output):
     """ 
     Find the journal that mentions the most unique drugs.
@@ -40,5 +41,8 @@ def related_drugs_via_pubmed(pipeline_output, target_drug):
                 if mention["source"] == "pubmed" and mention["drug"] != target_drug
             )
 
-    return related_drugs  
+    # Return a message if no related drugs are found
+    if not related_drugs:
+        return f"No drugs found related to {target_drug} via PubMed."
 
+    return related_drugs

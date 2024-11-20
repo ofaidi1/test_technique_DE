@@ -47,7 +47,7 @@ project/
 │   ├── test_transform.py
 │   ├── test_output.py
 ├── .gitignore/               
-├── config.json/              # Fichier de cofiguration dans lequel on choisit le médicament pour répondre à la deuxieme question du taitement ad-hoc
+├── config.py/                # Fichier de cofiguration 
 ├── pipeline.py               # Orchestration complète du pipeline
 ├── requirements.txt          # Dépendances Python
 └── README.md                 # Documentation du projet
